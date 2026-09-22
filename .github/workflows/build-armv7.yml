@@ -1,0 +1,56 @@
+name: Build Madmail for D-Link ARMv7
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-armv7:
+    name: Build ARMv7 Musl Static Binary
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: armv7-unknown-linux-musleabihf
+
+      - name: Set up Node.js for WebAdmin SPA
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install cross-compilation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-linux-gnueabihf musl-tools
+          cargo install cargo-zigbuild
+
+      - name: Build WebAdmin Dashboard Assets
+        run: |
+          cd crates/chatmail-admin-web/admin-web
+          npm install
+          npm run build
+
+      - name: Build Madmail Statically for ARMv7
+        env:
+          CHATMAIL_ADMIN_WEB_BUILD: ${{ github.workspace }}/crates/chatmail-admin-web/admin-web/build
+        run: |
+          cargo zigbuild -p chatmail --release --target armv7-unknown-linux-musleabihf
+          mkdir -p dist
+          cp target/armv7-unknown-linux-musleabihf/release/madmail dist/madmail-dlink-armv7
+          chmod +x dist/madmail-dlink-armv7
+
+      - name: Upload Binary Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: madmail-dlink-armv7
+          path: dist/madmail-dlink-armv7
+          retention-days: 7
